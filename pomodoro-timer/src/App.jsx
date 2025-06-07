@@ -1,149 +1,203 @@
-//Pomodoro Code
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from "react";
 
-function App() {
-  const [customMinutes, setCustomMinutes] = useState(25);
-  const [timeLeft, setTimeLeft] = useState(customMinutes * 60);
+const themes = {
+  // ... keep your theme object unchanged
+  default: { /* same as above */ },
+  dark: { /* same as above */ },
+  softPurple: { /* same as above */ },
+  pastelGreen: { /* same as above */ }
+};
+
+const PomodoroTimer = () => {
+  const defaultWorkDuration = 25 * 60;
+  const defaultBreakDuration = 5 * 60;
+
+  const [workDuration, setWorkDuration] = useState(defaultWorkDuration);
+  const [breakDuration, setBreakDuration] = useState(defaultBreakDuration);
+  const [timeLeft, setTimeLeft] = useState(defaultWorkDuration);
   const [isRunning, setIsRunning] = useState(false);
-  const [musicOption, setMusicOption] = useState('none');
-  const [volume, setVolume] = useState(100);
-  const iframeRef = useRef(null);
+  const [isBreak, setIsBreak] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [themeName, setThemeName] = useState("default");
 
-  useEffect(() => {
-    setTimeLeft(customMinutes * 60);
-  }, [customMinutes]);
+  const timerRef = useRef(null);
+  const audioRef = useRef(null);
 
-  useEffect(() => {
-    let timer;
-    if (isRunning && timeLeft > 0) {
-      timer = setInterval(() => setTimeLeft((t) => t - 1), 1000);
-    }
-    return () => clearInterval(timer);
-  }, [isRunning, timeLeft]);
+  const theme = themes[themeName];
 
   const formatTime = (seconds) => {
-    const m = String(Math.floor(seconds / 60)).padStart(2, '0');
-    const s = String(seconds % 60).padStart(2, '0');
-    return `${m}:${s}`;
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  const handleStartPause = () => {
-    if (timeLeft === 0) setTimeLeft(customMinutes * 60);
-    setIsRunning(!isRunning);
+  useEffect(() => {
+    if (isRunning) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            if (audioRef.current) {
+              audioRef.current.play().catch(() => {});
+            }
+            if (!isBreak) {
+              setIsBreak(true);
+              return breakDuration;
+            } else {
+              setIsBreak(false);
+              return workDuration;
+            }
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [isRunning, isBreak, workDuration, breakDuration]);
+
+  const handleStart = () => {
+    if (timeLeft <= 0) {
+      setTimeLeft(isBreak ? breakDuration : workDuration);
+    }
+    setIsRunning(true);
+  };
+
+  const handlePause = () => {
+    setIsRunning(false);
   };
 
   const handleReset = () => {
     setIsRunning(false);
-    setTimeLeft(customMinutes * 60);
+    setTimeLeft(isBreak ? breakDuration : workDuration);
   };
 
-  const getYouTubeEmbedUrl = () => {
-    switch (musicOption) {
-      case 'lofi':
-        return 'https://www.youtube.com/embed/videoseries?list=PLz7qJEc6I_pQKz7B0D1hzQeDEi4AOsTiM&autoplay=1&mute=0';
-      case 'focus':
-        return 'https://www.youtube.com/embed/videoseries?list=PLRbjoNhQ1PaFA3WmnTqg1zghOucqDkBFQ&autoplay=1&mute=0';
-      case 'jazz':
-        return 'https://www.youtube.com/embed/videoseries?list=PL8F6B0753B2CCA128&autoplay=1&mute=0';
-      case 'nature':
-        return 'https://www.youtube.com/embed/videoseries?list=PLQWzKIaERi4iF8UtYy2iClyWd9G27YECc&autoplay=1&mute=0';
-      default:
-        return '';
-    }
+  const handleSkipBreak = () => {
+    setIsRunning(false);
+    setIsBreak(false);
+    setTimeLeft(workDuration);
   };
+
+  const handleSettingsSubmit = (e) => {
+    e.preventDefault();
+    const w = Math.min(60, Math.max(1, parseInt(e.target.work.value, 10) || 25));
+    const b = Math.min(30, Math.max(1, parseInt(e.target.break.value, 10) || 5));
+    setWorkDuration(w * 60);
+    setBreakDuration(b * 60);
+    setIsRunning(false);
+    setIsBreak(false);
+    setTimeLeft(w * 60);
+    setShowSettings(false);
+  };
+
+  const totalDuration = isBreak ? breakDuration : workDuration;
+  const progressPercent = ((totalDuration - timeLeft) / totalDuration) * 100;
+  const progressColor = isBreak ? theme.progressBreak : theme.progressWork;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 to-blue-100 flex items-center justify-center px-4">
-      <div className="bg-white shadow-2xl rounded-3xl p-8 max-w-xl w-full text-center space-y-6">
-        <h1 className="text-4xl font-extrabold text-gray-800">🎯 Pomodoro Timer</h1>
+    <div className={`${theme.bgColor} min-h-screen flex flex-col items-center justify-center p-4`}>
+      <h1 className={`text-4xl font-bold mb-6 ${theme.textColor}`}>Pomodoro Timer</h1>
 
-        {/* Duration Picker */}
-        <div>
-          <label className="text-lg font-medium block mb-1">Set Duration (in minutes)</label>
-          <input
-            type="number"
-            min="1"
-            max="120"
-            value={customMinutes}
-            disabled={isRunning}
-            onChange={(e) => setCustomMinutes(Number(e.target.value))}
-            className="w-24 px-4 py-2 text-center rounded-lg border border-gray-300 focus:outline-none"
-          />
-        </div>
+      <div className={`text-6xl font-mono mb-4 ${theme.textColor}`}>
+        {formatTime(timeLeft)}
+      </div>
 
-        {/* Music Selector */}
-        <div>
-          <label className="text-lg font-medium block mb-1">Background Music</label>
-          <select
-            value={musicOption}
-            disabled={isRunning}
-            onChange={(e) => setMusicOption(e.target.value)}
-            className="w-64 px-4 py-2 rounded-lg border border-gray-300 focus:outline-none"
-          >
-            <option value="none">None</option>
-            <option value="lofi">🎧 Lofi Beats</option>
-            <option value="focus">🧠 Focus Music</option>
-            <option value="jazz">🎷 Jazz Vibes</option>
-            <option value="nature">🌿 Nature Sounds</option>
-          </select>
-        </div>
-
-        {/* Timer Display */}
-        <div className="text-6xl font-mono tracking-wide text-gray-900">
-          {formatTime(timeLeft)}
-        </div>
-
-        {/* Controls */}
-        <div className="flex justify-center gap-4">
+      <div className="flex space-x-4 mb-4">
+        <button
+          onClick={handleStart}
+          className={`px-4 py-2 rounded ${theme.primaryColor} ${theme.primaryHover} ${theme.primaryActive} text-white`}
+        >
+          Start
+        </button>
+        <button
+          onClick={handlePause}
+          className={`px-4 py-2 rounded ${theme.secondaryColor} ${theme.secondaryHover} ${theme.secondaryActive} text-white`}
+        >
+          Pause
+        </button>
+        <button
+          onClick={handleReset}
+          className={`px-4 py-2 rounded ${theme.warningColor} ${theme.warningHover} ${theme.warningActive} text-white`}
+        >
+          Reset
+        </button>
+        {isBreak && (
           <button
-            onClick={handleStartPause}
-            className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-xl text-lg font-semibold transition"
+            onClick={handleSkipBreak}
+            className={`px-4 py-2 rounded ${theme.dangerColor} ${theme.dangerHover} ${theme.dangerActive} text-white`}
           >
-            {isRunning ? 'Pause' : 'Start'}
+            Skip Break
           </button>
-          <button
-            onClick={handleReset}
-            className="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-xl text-lg font-semibold transition"
-          >
-            Reset
-          </button>
-        </div>
-
-        {/* Embedded Music Player */}
-        {musicOption !== 'none' && (
-          <div className="bg-gray-50 p-4 rounded-xl shadow-inner space-y-4">
-            <h2 className="text-xl font-semibold text-gray-700">🎵 Now Playing</h2>
-            <iframe
-              ref={iframeRef}
-              width="100%"
-              height="170"
-              src={getYouTubeEmbedUrl()}
-              title="YouTube Music Playlist"
-              allow="autoplay; encrypted-media"
-              allowFullScreen
-              className="rounded-lg shadow"
-            ></iframe>
-
-            {/* Volume Slider - Informational */}
-            <div className="space-y-1">
-              <label className="block text-sm font-medium text-gray-600">Volume (visual only)</label>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
-                className="w-full"
-              />
-              <p className="text-xs text-gray-500 text-center">
-                🔊 Adjust volume on your device or YouTube player directly
-              </p>
-            </div>
-          </div>
         )}
       </div>
+
+      <div className="w-full max-w-md h-4 bg-gray-300 rounded-full mt-4 overflow-hidden">
+        <div
+          className={`${progressColor} h-full transition-all duration-500`}
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+
+      <div className="mt-6">
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className={`underline ${theme.toggleText}`}
+        >
+          {showSettings ? "Hide Settings" : "Show Settings"}
+        </button>
+      </div>
+
+      {showSettings && (
+        <form onSubmit={handleSettingsSubmit} className={`mt-4 p-4 rounded ${theme.settingsBg}`}>
+          <label className={`${theme.bodyTextColor} block mb-2`}>
+            Work (minutes):
+            <input
+              name="work"
+              type="number"
+              min="1"
+              max="60"
+              defaultValue={workDuration / 60}
+              className="ml-2 p-1 border rounded"
+            />
+          </label>
+          <label className={`${theme.bodyTextColor} block mb-2`}>
+            Break (minutes):
+            <input
+              name="break"
+              type="number"
+              min="1"
+              max="30"
+              defaultValue={breakDuration / 60}
+              className="ml-2 p-1 border rounded"
+            />
+          </label>
+          <button
+            type="submit"
+            className={`mt-2 px-3 py-1 rounded ${theme.primaryColor} ${theme.primaryHover} text-white`}
+          >
+            Save
+          </button>
+        </form>
+      )}
+
+      <div className="mt-6">
+        <label className={`${theme.bodyTextColor} mr-2`}>Theme:</label>
+        <select
+          value={themeName}
+          onChange={(e) => setThemeName(e.target.value)}
+          className="p-2 rounded border"
+        >
+          {Object.keys(themes).map((key) => (
+            <option key={key} value={key}>
+              {themes[key].name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <audio ref={audioRef} src="https://www.soundjay.com/button/beep-07.wav" preload="auto" />
     </div>
   );
-}
+};
 
-export default App;
+export default PomodoroTimer;
